@@ -4,12 +4,7 @@ library(tidyverse) #general data wrangling
 library(openai) # access to GPT-3
 library(lubridate) #making the dates easier
 
-# already used key
-# Sys.setenv(OPENAI_API_KEY = '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')
-# tymek key
-Sys.setenv(OPENAI_API_KEY = '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')
-# dario key
-key <- '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'
+
 
 data <- read_delim("/Users/gustawkempa/Desktop/Studia/Master/data/speeches/speeches_IT_translated.csv")
 
