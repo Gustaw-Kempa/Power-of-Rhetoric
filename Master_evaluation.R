@@ -1,0 +1,96 @@
+rm(list = ls())
+
+library(tidyverse) #general data wrangling
+library(openai) # access to GPT-3
+library(lubridate) #making the dates easier
+
+# already used key
+# Sys.setenv(OPENAI_API_KEY = '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')
+# tymek key
+Sys.setenv(OPENAI_API_KEY = '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')
+# dario key
+key <- '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'
+
+data <- read_delim("/Users/gustawkempa/Desktop/Studia/Master/data/speeches/speeches_IT_translated.csv")
+
+prompts <-tibble(prompts = c("Evaluate the sentiment and its strenght in the the text. Output only a number from -5 (very negative) to 5 (very positive) with 0.1 increments. Text:'",
+             "Detect the emotion of happiness in the following text. Evaluate strenght of the emotion on a scale. Output only a number from 0 (no happiness) to 5 (very happy) with 0.1 increments. Text: '",
+             "Detect the persuasion in the following text. Evaluate strenght of the emotion on a scale. Output only a number from 0 (no persuasion) to 5 (very persuasive) with 0.1 increments. Text: '",
+             "Detect the emotion of anger in the following text. Evaluate strenght of the emotion on a scale. Output only a number from 0 (no anger) to 5 (very angry) with 0.1 increments. Text: '",
+             "Detect the emotion of fear in the following text. Evaluate strenght of the emotion on a scale. Output only a number from 0 (no fear) to 5 (very fearful) with 0.1 increments. Text:'",
+             "Detect the emotion of surprise in the following text. Evaluate strenght of the emotion on a scale. Output only a number from 0 (not surprised) to 5 (very surprised) with 0.1 increments. Text: '",
+             "Detect the informativeness in the following text. Evaluate its strenght on a scale. Output only a number from 0 (no informativeness) to 5 (very informative) with 0.1 increments. Text: '"
+)
+, emotions = c("sentiment", "happiness", "persuasion", "anger", "fear", "surprise", "informativeness")
+)
+
+#fixing the dates in dataset
+# TODO: fix italian dates
+# data$dates <- ymd(data$dates)
+#count the number of words in each speech - would be better to count tokens instead - will be implemented :)
+data$count <- str_count(data$speeches_EN, "\\w+")
+list_models()
+#a loop splitting the speeches into 400 word groups (with a 50-word overlap)
+df <- tibble()
+fragm <- c()
+for (i in 1:nrow(data)) {
+  #we need to check how many groups to create
+  
+  speech_fragment <-
+    unlist(strsplit(data$speeches_EN[i], "(?<=[[:punct:]])\\s(?=[A-Z])", perl = T))
+  fragm <- c()
+  for (j in 1:floor(length(speech_fragment) / 5)) {
+    fragm[j] <-
+      paste(
+        speech_fragment[j * 5 - 4],
+        speech_fragment[j * 5 - 3],
+        speech_fragment[j * 5 - 2],
+        speech_fragment[j * 5 - 1],
+        speech_fragment[j * 5]
+      )
+    fragm[j] <- gsub('NA', '', fragm[j])
+    fragm[j] <- gsub('\n', '', fragm[j])
+  }
+  
+  #we need to set bouandries for the fragment
+  #speech_fragment <- word(data$speeches[i], max(0, (n-1)*350-50), min(-1,(n-t)*350))
+  #speech_fragment <- word(data$speeches[i], max(0, (n-1)*400-50), min(data$count[i],n*400))
+  df_temp <-
+    data.frame(
+      fragment = fragm,
+      fragment_no = c(1:length(fragm)),
+      date = data$dates[i]
+    )
+  df <- rbind.data.frame(df, df_temp)
+}
+
+# res <- matrix(NA, nrow = nrow(df), ncol = nrow(prompts))
+colnames(res) <- prompts$emotions
+
+for (j in 1:nrow(prompts)) {
+  for (i in which(is.na(res[,j]))) {
+   tryCatch({
+      
+        prompt <-paste (prompts$prompts[j], df$fragment[i], "'")
+    sim  <- create_completion(
+      model = "gpt-3.5-turbo-0301",
+      max_tokens = 100,
+      temperature = 0,
+      prompt = prompt,
+      openai_api_key = key)
+scores <- sim$choices$text
+scores <- readr::parse_number(sim$choices$text)
+res[i,j] <- scores
+print(paste(i,j, " score:", scores, Sys.time()))
+Sys.sleep(5)
+
+
+ }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+  write.csv(res, paste("temp_res_IT",j, ".csv" ))
+            }
+
+
+IT_data <- as_tibble(res)
+
+write_csv(IT_data, "IT_emotions.csv")
