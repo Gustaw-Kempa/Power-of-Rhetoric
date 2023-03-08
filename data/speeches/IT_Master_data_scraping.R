@@ -109,20 +109,26 @@ Non voglio qui ripetere le bellissime parole di oggi del Presidente della Repubb
 È con questo spirito di fiducia nel nostro, nel vostro futuro e con l'impegno di questo governo a conquistarsela, che vi auguro buon 8 marzo."
 
 
-# # Getting rid of the Q&A parts
-# data_ES$speeches_ES <- str_extract(data_ES$speeches_ES, "^(.*?)(?=(P:|PREGUNTA:|P[.-])|$)")
-# 
-# data_ES$speeches_ES[27]
-# 
-# data_ES$count <- str_count(data_ES$speeches_ES, "\\w+")
-# data_ES$titles <- gsub("\n", "", data_ES$titles)
-# data_ES$speeches_ES <- gsub("\n", "", data_ES$speeches_ES)
 
 
 topics_EN <- gl_translate(t_string = data_IT$titles, target = "en",
                                   format = "text", model = "nmt")[1]
 speeches_EN <- gl_translate(t_string = data_IT$speeches_IT, target = "en",
                                     format = "text", model = "nmt")[1]
+
+
+months <- sub(".*,\\s(\\d{1,2})\\s(\\w+)\\s\\d{4}$", "\\2", data_IT$dates)
+months <- gl_translate(t_string = months, target = "en",
+                       format = "text", model = "nmt")[1]
+
+
+# data_IT$dates <- 
+
+
+data_IT$dates <-sub(".*,\\s(\\d{1,2})\\s(\\w+)\\s(\\d{4})$", "\\1 \\3", data_IT$dates)
+data_IT$dates<- paste(months$translatedText,data_IT$dates )
+data_IT$dates <- mdy(data_IT$dates)
+
 
 
 data <- cbind(data_IT,topics_EN ,speeches_EN)
