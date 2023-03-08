@@ -4,7 +4,8 @@ library(tidyverse) #general data wrangling
 library(openai) # access to GPT-3
 library(lubridate) #making the dates easier
 
-
+# A unique private openAI API key needs to be provided:
+# Sys.setenv(OPENAI_API_KEY = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 
 data <- read_delim("/Users/gustawkempa/Desktop/Studia/Master/data/speeches/speeches_IT_translated.csv")
 
@@ -20,8 +21,7 @@ prompts <-tibble(prompts = c("Evaluate the sentiment and its strenght in the the
 )
 
 #fixing the dates in dataset
-# TODO: fix italian dates
-# data$dates <- ymd(data$dates)
+ data$dates <- ymd(data$dates)
 #count the number of words in each speech - would be better to count tokens instead - will be implemented :)
 data$count <- str_count(data$speeches_EN, "\\w+")
 list_models()
@@ -68,7 +68,7 @@ for (j in 1:nrow(prompts)) {
       
         prompt <-paste (prompts$prompts[j], df$fragment[i], "'")
     sim  <- create_completion(
-      model = "gpt-3.5-turbo-0301",
+      model = "text-davinci-003",
       max_tokens = 100,
       temperature = 0,
       prompt = prompt,
@@ -89,3 +89,45 @@ Sys.sleep(5)
 IT_data <- as_tibble(res)
 
 write_csv(IT_data, "IT_emotions.csv")
+
+
+# Implementing the gpt-3.5-turbo in the completions
+
+prompt_chat <- c("Evaluate the sentiment and its strenght in the the text. Output only a number from -5 (very negative) to 5 (very positive) with 0.1 increments. Do not provide any explanation.",
+                                  "Detect the emotion of happiness in the following text. Evaluate strenght of the emotion on a scale. Output only a number from 0 (no happiness) to 5 (very happy) with 0.1 increments. Do not provide any explanation. ",
+                                  "Detect the persuasion in the following text. Evaluate strenght of the emotion on a scale. Output only a number from 0 (no persuasion) to 5 (very persuasive) with 0.1 increments. Do not provide any explanation.",
+                                  "Detect the emotion of anger in the following text. Evaluate strenght of the emotion on a scale. Output only a number from 0 (no anger) to 5 (very angry) with 0.1 increments. Do not provide any explanation.",
+                                  "Detect the emotion of fear in the following text. Evaluate strenght of the emotion on a scale. Output only a number from 0 (no fear) to 5 (very fearful) with 0.1 increments. Do not provide any explanation.",
+                                  "Detect the emotion of surprise in the following text. Evaluate strenght of the emotion on a scale. Output only a number from 0 (not surprised) to 5 (very surprised) with 0.1 increments. Do not provide any explanation.",
+                                  "Detect the informativeness in the following text. Evaluate its strenght on a scale. Output only a number from 0 (no informativeness) to 5 (very informative) with 0.1 increments. Do not provide any explanation."
+)
+
+for (j in 1:nrow(prompt_chat)) {
+  for (i in which(is.na(res[,j]))) {
+    tryCatch({
+
+      
+      ans <- create_chat_completion(
+  model = "gpt-3.5-turbo", temperature = 0, 
+  messages = list(
+    list("role" = "system",
+         "content" = prompt_chat[j]),
+    list("role" = "user",
+         "content" = df$fragment[i])
+  )
+)
+
+scores <- readr::parse_number(ans$choices$message.content)
+res[i,j] <- scores
+print(paste(i,j, " score:", scores, Sys.time()))
+Sys.sleep(5)
+
+
+    }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+  }
+  write.csv(res, paste("temp_res_IT",j, ".csv" ))
+}
+
+
+
+?create_chat_completion
