@@ -7,7 +7,14 @@ library(lubridate) #making the dates easier
 # A unique private openAI API key needs to be provided:
 # Sys.setenv(OPENAI_API_KEY = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 
-data <- read_delim("/Users/gustawkempa/Desktop/Studia/Master/data/speeches/speeches_DE_translated.csv")
+
+
+data <- read_delim("datasets/speeches/speeches_DE_translated.csv")
+# data <- read_delim("datasets/speeches/speeches_IT_translated.csv")
+# data <- read_delim("datasets/speeches/speeches_ES_translated.csv")
+# data <- read_delim("datasets/speeches/speeches_FR_translated.csv")
+# data <- read_delim("datasets/speeches/UK.csv")
+# data <- read_delim("datasets/speeches/USA.csv")
 
 prompts <-tibble(prompts = c("Evaluate the sentiment and its strenght in the the text. Output only a number from -5 (very negative) to 5 (very positive) with 0.1 increments. Text:'",
              "Detect the emotion of happiness in the following text. Evaluate strenght of the emotion on a scale. Output only a number from 0 (no happiness) to 5 (very happy) with 0.1 increments. Text: '",
