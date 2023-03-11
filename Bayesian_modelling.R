@@ -5,15 +5,17 @@ library(lubridate) #making the dates easier
 library(BBmisc) # data scaling and normalizing
 library(reshape2) # melting data for plots
 library(loo)
-library(hsstan)
 library(arm)
 
 
 set.seed(123)
-model_data <- read.csv('/Users/gustawkempa/Desktop/Studia/Master/data/model_data.csv')
+model_data <- read.csv('datasets/model_data.csv')
+
+# TODO: maybe implement some transformation on cases (log, ^2) - data is super skewed
+hist(model_data$cases)
+
 
 # in order to perform bayesian analysis with priors we need to normalize the data
-# TODO: update when new metrics are added
 model_data <- model_data %>% na.omit()
 model_data <- tibble(date = model_data$date, country = model_data$country,week =  model_data$week,
                      normalize(model_data[,2:(ncol(model_data)-6)], method = "range", range = c(0,1)),
@@ -31,7 +33,7 @@ hist(model_data$diff1)
 #use prior distributions to simulate hypothetical data and
 #check whether it makes sense (compare with real data)
 
-sim_diff<- normalize(rt(101, df=7), method = 'range', range = c(-1,1))
+sim_diff<- normalize(rt(150, df=20), method = 'range', range = c(-1,1))
 plot_df <- melt(tibble(obs = model_data$diff1,sim = sim_diff))
 ggplot(plot_df, aes(x=value, fill = variable)) + geom_density()
 
@@ -292,9 +294,16 @@ fit2 <- stan(model_code = model_code_tstud,
 # First evaluation of the model
 fit_summary = summary(fit)
 print(fit_summary$summary)
-# traceplot(fit, inc_warmup = TRUE)
+rstan::traceplot(fit, inc_warmup = TRUE)
 
- #### Convergence diagnostics ####
+fit_summary2 = summary(fit2)
+print(fit_summary2$summary)
+rstan::traceplot(fit2, inc_warmup = TRUE)
+
+
+
+
+#### Convergence diagnostics ####
 # (source: arXiv:1903.08008):
 # 1. Rhat - Comparison of between chain and within chain estimations. Let's us decide whether the chains 
 # have mixed properly. Is calculated for each variable. Should be around 1 (less than 1.1)
@@ -356,9 +365,12 @@ ess_tail(array_of_draws[,,4])
 ess_tail(array_of_draws[,,5])
 
 #### Coefficient analysis ####
+#### model 1 ####
 #confronting the posteriors with priors, checking whether they make sense and 
 # are interpretable/ have effect on the model
-plot(fit2)
+plot(fit, show_density = TRUE, ci_level = 0.5, fill_color = "pink")
+
+
 hist(param.sims$alpha,xlim = c(-1,1),xlab = 'alpha',main = 'posterior distirbution of\nbaseline rate of change in support')
 abline(v=0, lty = 2)
 legend(
@@ -371,7 +383,7 @@ median(param.sims$alpha)
 
 # alpha has a small significant negative effect on the dependent variable 
 
-hist(param.sims$theta,
+hist(param.sims$psi_sent,
      xlim = c(-1.5,1.5),xlab = 'psi_sent',main = 'posterior distirbution of\neffect of sentiment')
 abline(v=0, lty = 2)
 legend(
@@ -382,6 +394,7 @@ legend(
 )
 median(param.sims$psi_sent)
 
+# no big effect of sentiment
 
 hist(param.sims$psi_info,
      xlim = c(-1.5,1.5),xlab = 'psi_info',main = 'posterior distirbution of\neffect of informativeness')
@@ -408,7 +421,7 @@ legend(
 median(param.sims$psi_pers)
 
 hist(param.sims$psi_surp,
-     xlim = c(-1.5,1.5),xlab = 'psi_surp',main = 'posterior distirbution of\neffect of surpuasion')
+     xlim = c(-1.5,1.5),xlab = 'psi_surp',main = 'posterior distirbution of\neffect of surprise')
 abline(v=0, lty = 2)
 legend(
   'topleft',
@@ -419,19 +432,21 @@ legend(
 median(param.sims$psi_surp) 
 
 
-hist(param.sims$psi_surp,
-     xlim = c(-1.5,1.5),xlab = 'psi_surp',main = 'posterior distirbution of\neffect of surpuasion')
+hist(param.sims$psi_hap,
+     xlim = c(-1.5,1.5),xlab = 'psi_surp',main = 'posterior distirbution of\neffect of happiness')
 abline(v=0, lty = 2)
 legend(
   'topleft',
-  legend = paste('Pr(psi_surp >0):',
-                 round(mean(param.sims$psi_surp>0),3)
+  legend = paste('Pr(psi_hap >0):',
+                 round(mean(param.sims$psi_hap>0),3)
   )
 )
-median(param.sims$psi_surp)
+median(param.sims$psi_hap)
+
+
 
 hist(param.sims$psi_ang,
-     xlim = c(-1.5,1.5),xlab = 'psi_ang',main = 'posterior distirbution of\neffect of anguasion')
+     xlim = c(-1.5,1.5),xlab = 'psi_ang',main = 'posterior distirbution of\neffect of anger')
 abline(v=0, lty = 2)
 legend(
   'topleft',
@@ -441,6 +456,16 @@ legend(
 )
 median(param.sims$psi_ang)
 
+hist(param.sims$theta,
+     xlim = c(-1.5,1.5),xlab = 'theta',main = 'posterior distirbution of\neffect of COVID cases control variable')
+abline(v=0, lty = 2)
+legend(
+  'topleft',
+  legend = paste('Pr(theta >0):',
+                 round(mean(param.sims$theta>0),3)
+  )
+)
+median(param.sims$theta)
 
 
 hist(param.sims$beta,
@@ -454,44 +479,152 @@ legend(
 )
 
 
-#install.packages('arm',dep=T)
 
-
-for(i in 1:4){
+for(i in 1:6){
 hist(param.sims$eta_tilde[,i],
      xlim = c(-1.5,1.5),
+     ylim = c(0,500),
      col = adjustcolor(i,0.2),
      xlab = 'trend.control',
      main = 'posterior distirbution of country effects')
-# par(new = T)
+  par(new = T)
 }
 
 
-# param.sims$eta*param.sims$sigma_eta
+#### model 1 ####
+#confronting the posteriors with priors, checking whether they make sense and 
+# are interpretable/ have effect on the model
+plot(fit2, show_density = TRUE, ci_level = 0.5, fill_color = "pink")
 
 
-# coefplot(object = param.sims)
-# param.sims$
+hist(param.sims2$alpha,xlim = c(-1,1),xlab = 'alpha',main = 'posterior distirbution of\nbaseline rate of change in support')
+abline(v=0, lty = 2)
+legend(
+  'topleft',
+  legend = paste('Pr(alpha >0):',
+                 round(mean(param.sims2$alpha>0),3)
+  )
+)
+median(param.sims2$alpha)
+
+# alpha has a small significant negative effect on the dependent variable 
+
+hist(param.sims2$psi_sent,
+     xlim = c(-1.5,1.5),xlab = 'psi_sent',main = 'posterior distirbution of\neffect of sentiment')
+abline(v=0, lty = 2)
+legend(
+  'topleft',
+  legend = paste('Pr(psi_sent >0):',
+                 round(mean(param.sims2$psi_sent>0),3)
+  )
+)
+median(param.sims2$psi_sent)
+
+# no big effect of sentiment
+
+hist(param.sims2$psi_info,
+     xlim = c(-1.5,1.5),xlab = 'psi_info',main = 'posterior distirbution of\neffect of informativeness')
+abline(v=0, lty = 2)
+legend(
+  'topleft',
+  legend = paste('Pr(psi_info >0):',
+                 round(mean(param.sims2$psi_info>0),3)
+  )
+)
+median(param.sims2$psi_info)
 
 
-ggplot(tibble(param.sims$psi_ang), aes(x=`param.sims$psi_ang`)) + geom_density()
 
-# plot(fit, ) + geom_abline(0)
-sims <- data.frame(param.sims)
-?plot
-plot(density(sims$psi_pers))
+hist(param.sims2$psi_pers,
+     xlim = c(-1.5,1.5),xlab = 'psi_pers',main = 'posterior distirbution of\neffect of persuasion')
+abline(v=0, lty = 2)
+legend(
+  'topleft',
+  legend = paste('Pr(psi_pers >0):',
+                 round(mean(param.sims2$psi_pers>0),3)
+  )
+)
+median(param.sims2$psi_pers)
 
-?`plot,stanfit-method`
-hist(param.sims$psi_ang,
-     xlim = c(-1.5,1.5),xlab = 'psi_ang',main = 'posterior distirbution of\neffect of anguasion')
+hist(param.sims2$psi_surp,
+     xlim = c(-1.5,1.5),xlab = 'psi_surp',main = 'posterior distirbution of\neffect of surprise')
+abline(v=0, lty = 2)
+legend(
+  'topleft',
+  legend = paste('Pr(psi_surp >0):',
+                 round(mean(param.sims2$psi_surp>0),3)
+  )
+)
+median(param.sims2$psi_surp) 
+
+
+hist(param.sims2$psi_hap,
+     xlim = c(-1.5,1.5),xlab = 'psi_surp',main = 'posterior distirbution of\neffect of happiness')
+abline(v=0, lty = 2)
+legend(
+  'topleft',
+  legend = paste('Pr(psi_hap >0):',
+                 round(mean(param.sims2$psi_hap>0),3)
+  )
+)
+median(param.sims2$psi_hap)
+
+
+
+hist(param.sims2$psi_ang,
+     xlim = c(-1.5,1.5),xlab = 'psi_ang',main = 'posterior distirbution of\neffect of anger')
 abline(v=0, lty = 2)
 legend(
   'topleft',
   legend = paste('Pr(psi_ang >0):',
-                 round(mean(param.sims$psi_ang>0),3)
+                 round(mean(param.sims2$psi_ang>0),3)
   )
 )
-median(param.sims$psi_ang)
+median(param.sims2$psi_ang)
+
+hist(param.sims2$theta,
+     xlim = c(-1.5,1.5),xlab = 'theta',main = 'posterior distirbution of\neffect of COVID cases control variable')
+abline(v=0, lty = 2)
+legend(
+  'topleft',
+  legend = paste('Pr(theta >0):',
+                 round(mean(param.sims2$theta>0),3)
+  )
+)
+median(param.sims2$theta)
+
+
+hist(param.sims2$beta,
+     xlim = c(-1.5,1.5),xlab = 'trend.control',main = 'posterior distirbution of\neffect of 2nd difference')
+abline(v=0, lty = 2)
+legend(
+  'topleft',
+  legend = paste('Pr(beta >0):',
+                 round(mean(param.sims2$beta>0),3)
+  )
+)
+
+
+
+for(i in 1:6){
+  hist(param.sims2$eta_tilde[,i],
+       xlim = c(-1.5,1.5),
+       ylim = c(0,500),
+       col = adjustcolor(i,0.2),
+       xlab = 'trend.control',
+       main = 'posterior distirbution of country effects')
+  par(new = T)
+}
+
+
+
+
+
+
+
+
+
+
 
 
 #### Posterioir predictive check ####
@@ -515,6 +648,12 @@ r_eff2 <- relative_eff(exp(log_lik_2), cores = 8)
 loo_1 <- loo(log_lik_1, r_eff = r_eff, cores = 8)
 loo_2 <- loo(log_lik_2, r_eff = r_eff2, cores = 8)
 
+plot(loo_1)
+
+# TODO: the data seems to stop fitting after a certain point! Why that can be?
+plot(loo_2)
+
+
 # LOO interpretations!
 # https://mc-stan.org/loo/reference/loo-glossary.html
 # Estimates - Estimates and Standard Errors are provided for:
@@ -525,140 +664,37 @@ loo_2 <- loo(log_lik_2, r_eff = r_eff2, cores = 8)
 # looic - LOO information criterion - can be used for model comparison - 
 # summarizes goodness of fit across all observations - the smaller looic the better
 # evaluates the balance between fit and complexity
-print(loo_1[1])
 
 
-# Pareto K estimates - amount of uncertainty in the model's predictions
-# Large scores -> overfitting
-# close to zero scores -> underfitting
-# NEEDS TO BE CHECKED!!!!
-print(loo_1)
-plot(loo_1)
 
-pp_check(fit)
 
-plot(loo_1)
-# Information criteria
-
-updated_loo1 <- loo_moment_match(fit, loo_1 )
-plot(updated_loo1)
-?loo
-loo_R2()
 # LOO IC + LOO R^2
 
 # LOO Rsquared
-loo_LPD <- loo_1[[5]]
-var_y <- var(model_data$diff1)
-looR2 <- 1 - loo_LPD/log(var_y)
+#model 1
+var_fit1 <- apply(param.sims$y_rep, 1 ,var)
+var_res1 <- as.matrix(fit, pars = c("sigma"))^2
+rsq1 <- var_fit1 / (var_fit1 + var_res1)
 
-loo_compare(loo_1, loo_2)
-plot(fit2)
-plot(fit)
-?loo_R2
-
-loo_R2(fit)
-bayes_R2(fit)
-loo_obj <- loo:loo(fit)
-loo_R2(fit)
-get_y(fit)
-calculate_loo_R2 <- function(loo_obj) {
-  # extract the loo information
-  loo_data <- loo_obj$loo
-  
-  # calculate the log-likelihood of the saturated model
-  ll_sat <- sum(log(1/loo_data$weights))
-  
-  # calculate the R^2
-  R2 <- 1 - (loo_data$elpd - ll_sat) / (ll_sat - log(1/loo_data$n))
-  
-  return(R2)
-}
-calculate_loo_R2(loo_obj)
-plot(fit)
-abline(v=0, lty = 2)
-stan_plot(fit, ci_level = 0.5, pars = c('psi_sent','psi_info', 'psi_pers', 'psi_ang', 'psi_surp', 'psi_hap', 'psi_fear')
-          ) + geom_vline(xintercept = 0, linetype = 2) + labs(title = 'Distribution of coefficents',
-                                                 subtitle='Red = 50% of interval,\nLine = 95% of interval' )+
-  theme(plot.title = element_text(hjust = 0.5))
-
-
-plot(fit, show_density = TRUE, ci_level = 0.5, fill_color = "pink", pars = c('psi_sent','psi_info', 'psi_pers', 'psi_ang', 'psi_surp', 'psi_hap', 'psi_fear')) + geom_vline(xintercept = 0, linetype = 2) +
-  theme(plot.title = element_text(hjust = 0.5)) + labs(title = 'Distribution of coefficents', 
-                                                       subtitle = 'Pink = 50% of interval, \nLine = 95% of interval')
-
-stan_dens(fit)
-
-loo_1$diagnostics
-post_pred <- posterior_predict(fit, newdata = model_data)
-
-posterior_p
-
-for (i in 1:length(exp)) {
-hist(param.sims$y_rep[,i])
-abline(v=exp[i], lty = 2)}
-
-
-obs <- apply(param.sims$y_rep,2, mean)
-exp <- data$V
-
-sss <- var(exp)/(var(obs-exp)+var(exp))
-ans_temporary <-param.sims$y_rep
-
-
-
-
-var_fit <- apply(param.sims$y_rep, 1 ,var)
-var_res <- as.matrix(fit, pars = c("sigma"))^2
-rsq <- var_fit / (var_fit + var_res)
-
-
-
-
-hist(rsq, sub = paste('Rsquared mean: ',
-                           round(mean(rsq),3)))
+hist(rsq1, sub = paste('Rsquared model 1 mean: ',
+                      round(mean(rsq1),3)))
 abline(v=median(rsq), lty =2, col = 'blue')
 
 
-rsquared <- c(1:1000)
-for (i in 1:101) {
-  
-ans_temporary[,i] <-  param.sims$y_rep[,i]-exp[i]
-}
-for (i in 1:1000) {
-rsquared[i] <- var(exp)/(var(ans_temporary[i,])+var(exp)) }
-hist(rsquared, sub = paste('Rsquared mean: ',
-                           round(mean(rsquared),3)))
-abline(v=median(rsquared), lty =2, col = 'blue')
+# model 2 
+var_fit2 <- apply(param.sims2$y_rep, 1 ,var)
+var_res2 <- as.matrix(fit2, pars = c("sigma"))^2
+rsq2 <- var_fit2 / (var_fit2 + var_res2)
+
+hist(rsq2, sub = paste('Rsquared model 2 mean: ',
+                       round(mean(rsq2),3)))
+abline(v=median(rsq), lty =2, col = 'blue')
 
 
-mean(rsquared)
-sd(rsquared)
-?abline
-plot(obs)
-plot(exp)
-plotting_d<-melt(tibble(data = exp,predictions = obs))
 
-ggplot(data = tibble(plotting_d,num = c(1:101, 1:101)), aes(y=value, col = variable, x=num )) + geom_line()
-model_data
 
-df_monthly <- model_data %>%
-  group_by(year_month = floor_date(date, "quarter"),country) %>% summarise(sentiment =mean(mean_sentiment),
-    informativeness = mean(mean_informativeness),persuasion =mean(mean_persuasion), anger = mean(mean_anger),
-    surprise = mean(mean_surprise), happiness = mean(mean_happiness), fear = mean(mean_fear))
-df_monthly$year_month <-paste(quarters(df_monthly$year_month),format(df_monthly$year_month, '%Y'))
-df_monthly <- tibble(df_monthly[c(1,2)], round(df_monthly[-c(1,2)],2))
-write.csv(df_monthly, 'monthly_data.csv')
-quarters(model_data$date)
-?quarter
-
-df_monthly <- tibble(df_monthly[c(1,2)], round(df_monthly[-c(1,2)],2))
-model_data$date <- ymd(model_data$date)
-
-gfgfg <- melt (df_monthly)
-
-ggplot(gfgfg, aes(y=value, x=year_month, color = country, group = country)) + geom_line() + facet_wrap(~variable) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + labs(title = 'Quarterly change of selected features') +
-  xlab('Date') + ylab('Mean effect strength')
+# Comparison of models -> model2 is better!
+loo_compare(loo_1, loo_2)
 
 
 
